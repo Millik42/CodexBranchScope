@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "branchscope_probe": {
+      "command": "node",
+      "args": ["server.mjs"],
+      "cwd": "."
+    }
+  }
+}

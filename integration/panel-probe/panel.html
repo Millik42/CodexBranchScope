@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>BranchScope Panel Probe</title>
+<h1>BranchScope Panel Probe</h1>
+<button type="button" disabled>Read local checkout</button>
+<pre role="status">Waiting for the panel host…</pre>
+<script>
+const button = document.querySelector('button');
+const status = document.querySelector('pre');
+const send = (method, params, id) => parent.postMessage({ jsonrpc: '2.0', method, params, id }, '*');
+let request;
+window.addEventListener('message', event => {
+  if (event.source !== parent || event.data?.jsonrpc !== '2.0') return;
+  const { id, method, params, result, error } = event.data;
+  if (id === 1) {
+    if (error) {
+      status.textContent = 'Panel initialization failed.';
+      return;
+    }
+    send('ui/notifications/initialized', {});
+    status.textContent = 'Panel connected. Select Read local checkout.';
+    button.disabled = false;
+  } else if (id === request || method === 'ui/notifications/tool-result') {
+    const info = (result ?? params)?._meta;
+    if (info) status.textContent = 'MCP directory: ' + info.directory + '\nGit checkout: ' + (info.checkout ?? 'Unavailable');
+    else if (id === request) status.textContent = 'The host did not return local checkout information.';
+  }
+});
+let next = 2;
+button.addEventListener('click', () => {
+  request = next++;
+  send('tools/call', { name: 'branchscope_checkout_probe', arguments: {} }, request);
+});
+send('ui/initialize', {
+  protocolVersion: '2026-01-26',
+  appInfo: { name: 'BranchScope Panel Probe', version: '0.1.0' },
+  appCapabilities: {},
+}, 1);
+</script>
+</html>

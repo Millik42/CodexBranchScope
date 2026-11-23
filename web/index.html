@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BranchScope</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="workspace">
+    <div class="identity">
+      <span class="brand">BranchScope</span>
+      <h1 id="repository">Git history</h1>
+      <div class="checkout">
+        <span id="branch" class="ref head" hidden></span>
+        <span id="path"></span>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="refresh" type="button">Refresh graph</button>
+      <div class="fetch-controls">
+        <select id="remote" aria-label="Remote to fetch"><option value="">Select remote</option></select>
+        <button id="fetch" type="button" class="primary" disabled>Fetch</button>
+      </div>
+    </div>
+  </header>
+  <p id="notice" role="alert" hidden></p>
+  <main>
+    <aside class="branches" aria-label="Branches">
+      <h2>Branches</h2>
+      <div id="refs"></div>
+    </aside>
+    <section class="history" aria-labelledby="history-title">
+      <header class="history-heading">
+        <h2 id="history-title">Commits</h2>
+        <span id="count"></span>
+      </header>
+      <div id="viewport" tabindex="0" aria-label="Scrollable commit history">
+        <div id="rows"></div>
+        <p id="placeholder">Reading local Git history…</p>
+      </div>
+      <footer>
+        <span id="status" role="status"></span>
+        <button id="older" type="button" hidden>Load older commits</button>
+      </footer>
+    </section>
+    <aside class="details" aria-labelledby="details-title">
+      <h2 id="details-title">Commit details</h2>
+      <div id="details"><p class="muted">Select a commit to see its details.</p></div>
+    </aside>
+  </main>
+</body>
+</html>

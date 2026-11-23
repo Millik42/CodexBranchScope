@@ -1,0 +1,10 @@
+{
+  "name": "branchscope-panel-probe",
+  "version": "0.1.0",
+  "description": "Checks local MCP Apps panel support and checkout context on Windows.",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "BranchScope Panel Probe",
+    "shortDescription": "Verify local MCP panel integration"
+  }
+}

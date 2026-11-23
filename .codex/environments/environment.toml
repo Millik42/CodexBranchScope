@@ -1,0 +1,7 @@
+version = 1
+name = "BranchScope"
+
+[[actions]]
+name = "Open BranchScope"
+icon = "run"
+command = "node src/open.mjs"
