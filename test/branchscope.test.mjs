@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -234,4 +234,103 @@ test('Panel probe stdio reports the checkout from main and linked worktrees', as
     assert.equal(code, 0, diagnostic);
     lines.close();
   }
+});
+
+test('MCP Apps stdio exposes the graph and binds each call to its checkout', async t => {
+  const root = await temp(t);
+  const fixture = await octopusFixture(root);
+  if (process.platform === 'win32') await writeFile(path.join(fixture.cwd, 'git.exe'), 'inert fixture');
+  const script = fileURLToPath(new URL('../src/mcp-panel.mjs', import.meta.url));
+  const child = spawn(process.execPath, [script], {
+    cwd: fixture.cwd,
+    env: { ...process.env, GIT_CEILING_DIRECTORIES: root },
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  const closed = once(child, 'close');
+  let diagnostic = '';
+  child.stderr.setEncoding('utf8').on('data', chunk => { diagnostic += chunk; });
+  const lines = createInterface({ input: child.stdout });
+  const responses = lines[Symbol.asyncIterator]();
+  let id = 0;
+  t.after(async () => {
+    child.stdin.destroy();
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    child.stdout.destroy();
+    child.stderr.destroy();
+    lines.close();
+  });
+  const request = async (method, params = {}) => {
+    const requestId = ++id;
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: requestId, method, params }) + '\n');
+    const { value, done } = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${method}: ${diagnostic}`)), 5000);
+      responses.next().then(result => {
+        clearTimeout(timeout);
+        resolve(result);
+      }, reject);
+    });
+    assert.equal(done, false, `MCP panel exited before answering ${method}: ${diagnostic}`);
+    const response = JSON.parse(value);
+    assert.equal(response.id, requestId);
+    assert.equal(response.error, undefined, JSON.stringify(response.error));
+    return response.result;
+  };
+
+  await request('initialize', { protocolVersion: '2025-11-25' });
+  const { tools } = await request('tools/list');
+  const launch = tools.find(tool => tool.name === 'branchscope');
+  const graph = tools.find(tool => tool.name === 'branchscope_graph');
+  assert.ok(launch);
+  assert.ok(graph);
+  assert.equal(launch._meta.ui.resourceUri, 'ui://branchscope/graph.html');
+  assert.deepEqual(launch._meta['openai/ui'].entrypoints, [{ type: 'thread' }]);
+  assert.deepEqual(graph._meta.ui.visibility, ['app']);
+
+  const { contents } = await request('resources/read', { uri: launch._meta.ui.resourceUri });
+  assert.equal(contents[0].uri, 'ui://branchscope/graph.html');
+  assert.equal(contents[0].mimeType, 'text/html;profile=mcp-app');
+  assert.match(contents[0].text, /<html/i);
+  assert.match(contents[0].text, /BranchScope/);
+  assert.doesNotMatch(contents[0].text, /src="\/(?:app\.js|mcp-panel\.js)"/);
+
+  const open = async arguments_ => request('tools/call', { name: graph.name, arguments: arguments_ });
+  const first = await open({ route: 'first' });
+  assert.deepEqual(first.content, []);
+  const main = first._meta.data;
+  assert.equal(main.session.length > 0, true);
+  assert.equal(main.project.root, fixture.cwd);
+  assert.equal(main.project.head, fixture.merge);
+  assert.ok(main.snapshot);
+  assert.equal(main.rows[0].id, fixture.merge);
+
+  const page = await open({ route: 'page', session: main.session, snapshot: main.snapshot, cursor: 0 });
+  assert.deepEqual(page.content, []);
+  assert.deepEqual(page._meta.data.rows, main.rows);
+  const detail = await open({ route: 'details', session: main.session, snapshot: main.snapshot, id: fixture.a });
+  assert.equal(detail._meta.data.id, fixture.a);
+  const refreshed = await open({ route: 'refresh', session: main.session });
+  assert.equal(refreshed._meta.data.project.head, fixture.merge);
+
+  const detachedResult = await open({ route: 'first', directory: fixture.detached });
+  const detached = detachedResult._meta.data;
+  assert.deepEqual(detachedResult.content, []);
+  assert.notEqual(detached.session, main.session);
+  assert.equal(detached.project.repository, main.project.repository);
+  assert.equal(detached.project.root, fixture.detached);
+  assert.equal(detached.project.head, fixture.a);
+  assert.equal(detached.project.branch, null);
+
+  const invalid = await open({ route: 'first', directory: path.join(root, 'missing checkout') });
+  assert.equal(invalid.isError, true);
+  assert.equal(invalid._meta.error.code, 'project_missing');
+  assert.deepEqual(invalid.content, []);
+  for (const result of [first, page, detail, refreshed, detachedResult, invalid]) {
+    assert.doesNotMatch(JSON.stringify(result.content), /commit|Octopus merge|Первая строка/i);
+  }
+
+  child.stdin.end();
+  const [code] = await closed;
+  assert.equal(code, 0, diagnostic);
+  lines.close();
 });

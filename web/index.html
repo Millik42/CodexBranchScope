@@ -18,6 +18,7 @@
       </div>
     </div>
     <div class="actions">
+      <button id="checkout-picker" type="button" aria-expanded="false" aria-controls="checkout-form" hidden>Open checkout…</button>
       <button id="refresh" type="button">Refresh graph</button>
       <div class="fetch-controls">
         <select id="remote" aria-label="Remote to fetch"><option value="">Select remote</option></select>
@@ -26,8 +27,13 @@
     </div>
   </header>
   <p id="notice" role="alert" hidden></p>
+  <form id="checkout-form" hidden>
+    <label for="checkout-directory">Local checkout path</label>
+    <input id="checkout-directory" name="directory" type="text" required autocomplete="off" spellcheck="false">
+    <button id="checkout-open" class="primary" type="submit">Open</button>
+  </form>
   <main>
-    <aside class="branches" aria-label="Branches">
+    <aside id="branches-panel" class="branches" aria-label="Branches">
       <h2>Branches</h2>
       <div id="refs"></div>
     </aside>
@@ -35,6 +41,10 @@
       <header class="history-heading">
         <h2 id="history-title">Commits</h2>
         <span id="count"></span>
+        <div class="panel-actions">
+          <button id="show-branches" type="button" aria-expanded="false" aria-controls="branches-panel">Branches</button>
+          <button id="show-details" type="button" aria-expanded="false" aria-controls="details-panel">Details</button>
+        </div>
       </header>
       <div id="viewport" tabindex="0" aria-label="Scrollable commit history">
         <div id="rows"></div>
@@ -45,7 +55,7 @@
         <button id="older" type="button" hidden>Load older commits</button>
       </footer>
     </section>
-    <aside class="details" aria-labelledby="details-title">
+    <aside id="details-panel" class="details" aria-labelledby="details-title">
       <h2 id="details-title">Commit details</h2>
       <div id="details"><p class="muted">Select a commit to see its details.</p></div>
     </aside>

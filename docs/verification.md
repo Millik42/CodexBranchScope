@@ -14,7 +14,17 @@ Run `npm.cmd test` with Node.js 20+ and Git for Windows 2.45+ available on `PATH
 | AC-06 | Nested project path containing spaces and Cyrillic characters, Unicode author and multiline commit message, and full commit details. |
 | AC-07 | Shallow boundary and unavailable parent, empty repository, non-Git directory, and missing Git executable. |
 
-The suite also verifies token enforcement, origin validation, stale page rejection, and the local MCP probe's JSON-RPC exchange.
+The suite also verifies token enforcement, origin validation, stale page rejection, and the JSON-RPC exchanges for both the MCP panel and the compatibility probe.
+
+## Native panel verification
+
+The Windows installer registered and enabled `branchscope@branchscope-local` using Codex CLI `0.171.0-alpha.13`. The local Codex app server discovered the BranchScope thread entrypoint and inline display preference and returned its self-contained `text/html;profile=mcp-app` resource. This check exercised the installed plugin through the Codex app server.
+
+The installed plugin was exercised through the same app-server version with two ephemeral chats in different repositories and a third chat in a linked worktree. Calling the graph in the order A → B → A, with no directory argument, returned each chat's checkout and branch. Reusing the first chat's graph session recovered its original snapshot. The linked worktree returned its own checkout and branch.
+
+To verify rendering in Codex Desktop, open **+ → More tools → Plugins and MCPs → BranchScope** in the right panel of each chat, then switch between them. Confirm that each tab displays its own checkout and branch without opening the checkout picker. The visual tab-switch check remains manual on Windows.
+
+In a chat created before BranchScope was installed, the right tab appeared in the picker but the Desktop log recorded `unknown MCP server 'branchscope'` on both the tool call and the resource read. Open the tab from a local chat created after installation. The log showed BranchScope reaching `ready` in newer threads.
 
 ## Windows smoke-test record
 
@@ -23,7 +33,7 @@ Observed on Windows with Codex Desktop package `OpenAI.Codex_26.1117.4957.0_x64`
 - Started local BranchScope servers from the shell for the GitGraf checkout and a temporary fixture in a nested path containing Unicode characters.
 - Opened the printed loopback URL in the Codex built-in browser. The graph showed the correct repository, checkout path, and `HEAD`. The branch jump reached the expected commit, the details showed the complete Unicode message, and the copy button reported **Copied**.
 - Repeated with two linked worktrees, one attached and one detached. Each showed the shared history with its own checkout path and correct `HEAD`.
-- The toolbar action and native MCP panel still need manual verification. The Windows computer-use skill available for this run disallows automating the native Codex app.
+- Launching from the toolbar and rendering the native panel in Codex Desktop still need manual verification. The app-server checks above cover plugin registration and checkout binding.
 
 ## Manual project-action check
 

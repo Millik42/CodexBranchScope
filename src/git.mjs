@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { windowsExecutable } from './windows-executable.mjs';
 
 export class GraphError extends Error {
   constructor(code, message, status = 400) {
@@ -18,13 +19,19 @@ const repositoryVariables = new Set([
 ]);
 
 export function gitRunner(executable = 'git') {
+  // Windows searches the child working directory before PATH for a bare executable name.
+  const command = process.platform === 'win32' && executable === 'git' ? windowsExecutable('git') : executable;
   return (cwd, args, input) => new Promise((resolve, reject) => {
+    if (!command) {
+      reject(Object.assign(new Error('Git was not found on PATH.'), { code: 'ENOENT' }));
+      return;
+    }
     const env = Object.fromEntries(Object.entries(process.env)
       .filter(([key]) => !repositoryVariables.has(key.toUpperCase())));
     Object.assign(env, {
       LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_NO_REPLACE_OBJECTS: '1',
     });
-    const child = spawn(executable, ['--no-pager', ...args], {
+    const child = spawn(command, ['--no-pager', ...args], {
       cwd, env, windowsHide: true, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     });
     let stdout = '';

@@ -6,12 +6,16 @@ const overscan = 8;
 const colors = ['#67dbb1', '#7fb5ff', '#ffc078', '#c3a6ff', '#f58daa', '#e1df77', '#72d8e9', '#f2a38b'];
 const svgNamespace = 'http://www.w3.org/2000/svg';
 const rendered = new Map();
-const fragment = location.hash.slice(1);
-if (fragment) {
-  sessionStorage.setItem('branchscope-token', fragment);
-  history.replaceState(null, '', '/');
+const panel = globalThis.branchScopePanel;
+let token;
+if (!panel) {
+  const fragment = location.hash.slice(1);
+  if (fragment) {
+    sessionStorage.setItem('branchscope-token', fragment);
+    history.replaceState(null, '', '/');
+  }
+  token = sessionStorage.getItem('branchscope-token');
 }
-const token = sessionStorage.getItem('branchscope-token');
 
 let graph;
 let pageRequest;
@@ -20,6 +24,7 @@ let navigation = 0;
 let detailRequest = 0;
 let busy = false;
 let pageFailed = false;
+let reopenCheckout = false;
 
 function element(tag, content, className) {
   const node = document.createElement(tag);
@@ -30,6 +35,15 @@ function element(tag, content, className) {
 }
 
 async function api(route, query = {}, method = 'GET') {
+  if (panel) {
+    const view = graph;
+    try {
+      return await panel.request(route, query);
+    } catch (error) {
+      if (view === graph && error.code === 'session_unavailable') reopenCheckout = true;
+      throw error;
+    }
+  }
   const response = await fetch('/api/' + route + '?' + new URLSearchParams(query), {
     method, headers: { Authorization: 'Bearer ' + token },
   });
@@ -49,6 +63,22 @@ function updateControls() {
   byId('fetch').disabled = busy || !byId('remote').value;
   byId('older').hidden = graph?.next == null;
   byId('older').disabled = Boolean(pageRequest);
+  if (panel) {
+    byId('checkout-picker').disabled = busy;
+    byId('checkout-open').disabled = busy;
+  }
+}
+
+function showCheckout(show) {
+  byId('checkout-form').hidden = !show;
+  byId('checkout-picker').setAttribute('aria-expanded', String(show));
+}
+
+function showPanel(name = '') {
+  document.body.dataset.panelView = name;
+  for (const view of ['branches', 'details']) {
+    byId('show-' + view).setAttribute('aria-expanded', String(view === name));
+  }
 }
 
 function label(text, kind) {
@@ -139,6 +169,7 @@ function commitButton(row, index) {
     element('span', row.id.slice(0, 8), 'oid'));
   button.addEventListener('click', () => {
     navigation++;
+    if (panel) showPanel('details');
     selectCommit(row.id);
   });
   return button;
@@ -240,6 +271,7 @@ async function jump(target, { focus = true, missing = true } = {}) {
       if (!await loadPage()) return;
     }
     if (!current()) return;
+    if (panel && focus) showPanel('details');
     viewport.scrollTop = Math.max(0, found.row * rowHeight - Math.floor(viewport.clientHeight / 2) + rowHeight / 2);
     renderRows();
     if (focus) rendered.get(found.row)?.focus({ preventScroll: true });
@@ -313,12 +345,25 @@ async function update(route, query = {}) {
   byId('fetch').textContent = route === 'fetch' ? 'Fetching…' : 'Fetch';
   try {
     const result = await api(route, query, route === 'first' ? 'GET' : 'POST');
+    const switched = panel && query.directory && graph?.project.root !== result.project.root;
     const keep = selected;
+    if (switched) byId('remote').value = '';
     installGraph(result);
-    if (keep) await jump(keep, { focus: false, missing: false });
+    if (panel && route === 'first') {
+      reopenCheckout = false;
+      showCheckout(false);
+    }
+    if (switched) {
+      await selectCommit(null);
+      showPanel();
+      viewport.focus();
+    } else if (keep) await jump(keep, { focus: false, missing: false });
   } catch (error) {
     notice(error.message);
-    if (!graph) byId('placeholder').textContent = 'Git history unavailable.';
+    if (!graph) {
+      byId('placeholder').textContent = 'Git history unavailable.';
+      if (panel) showCheckout(true);
+    }
   } finally {
     busy = false;
     byId('refresh').textContent = 'Refresh graph';
@@ -331,8 +376,36 @@ viewport.addEventListener('scroll', scrollRows, { passive: true });
 new ResizeObserver(scrollRows).observe(viewport);
 byId('older').addEventListener('click', loadPage);
 byId('remote').addEventListener('change', updateControls);
-byId('refresh').addEventListener('click', () => update('refresh'));
+byId('refresh').addEventListener('click', () => {
+  if (panel && !graph) return update('first');
+  if (reopenCheckout) return update('first', { directory: graph.project.root });
+  return update('refresh');
+});
 byId('fetch').addEventListener('click', () => update('fetch', {
   snapshot: graph.snapshot, remote: byId('remote').value,
 }));
+if (panel) {
+  document.body.classList.add('native-panel');
+  byId('checkout-picker').hidden = false;
+  const directoryInput = byId('checkout-directory');
+  byId('checkout-picker').addEventListener('click', () => {
+    const show = byId('checkout-form').hidden;
+    if (show) directoryInput.value = graph?.project.root ?? directoryInput.value;
+    showCheckout(show);
+    if (show) {
+      directoryInput.focus();
+      directoryInput.select();
+    }
+  });
+  byId('checkout-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const directory = directoryInput.value.trim();
+    if (directory) void update('first', { directory });
+  });
+  for (const view of ['branches', 'details']) {
+    byId('show-' + view).addEventListener('click', () => {
+      showPanel(document.body.dataset.panelView === view ? '' : view);
+    });
+  }
+}
 void update('first');
