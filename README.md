@@ -89,3 +89,7 @@ npm.cmd test
 ```
 
 See the [requirements](docs/requirements.md) for feature scope, the [technical specification](docs/technical-specification.md) for architecture, and the [verification notes](docs/verification.md) for test coverage, Windows smoke tests, and the Codex panel compatibility probe.
+
+## License
+
+BranchScope is licensed under the [MIT License](LICENSE).
